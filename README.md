@@ -14,29 +14,16 @@ OneID JWT auth sdk for python
 ```
 
 ### 使用SDK
-> 使用案例参考：test/idp_test.py
+> 使用案例参考：tests/test_jws.py
 1. 初始化配置：
 ```pythpn
-jwt_config = oneid_auth.JwtConfig(testPrivKey, testIssuer, testLoginBaseURL)
+jwt_signer = oneid_auth.Signer(private_key, issuer, login_url)
 ```
 2. 生成免登url：
-- 通过用户信息UserInfo生成(UserInfo中preferred_username、email、mobile三个属性至少存在一个)
+- 通过用户信息UserInfo生成(UserInfo中user_id和name为必传字段，username、email、mobile三个属性至少存在一个)
 ```python
-user_info = oneid_auth.UserInfo("user_id_123", name="jinrruan", email="jinrruan@qq.com")
+user_info = oneid_auth.UserInfo("user_id_123", "jinrruan", email="jinrruan@qq.com")
 
-login_url = oneid_auth.generate_login_url(jwt_config, 
-                                          user_info=user_info,
-                                          app=oneid_auth.App_Tencent_Meeting, 
-                                          params={"name": "1+2", "age": 18, "email": "123@qq.com"})
-```
-- 通过自定义claims生成
-```python
-cur_claims = {"user_id": "user_id_123", "name": "jinrruan",
-                  "email": "jinrruan@qq.com",
-                  "haha": "====", "iss": "jinrruan"}
-
-login_url = oneid_auth.generate_login_url(jwt_config,
-                                          claims=cur_claims,
-                                          app=oneid_auth.App_Tencent_Docs,
+login_url = jwt_signer.generate_login_url(user_info, oneid_auth.App_Tencent_Meeting, 
                                           params={"name": "1+2", "age": 18, "email": "123@qq.com"})
 ```
