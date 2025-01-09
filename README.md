@@ -16,8 +16,13 @@ OneID JWT auth sdk for python
 ### 使用SDK
 > 使用案例参考：tests/test_jws.py
 1. 初始化配置：
-```pythpn
+- 私钥以String形式提供
+```python
 jwt_signer = oneid_auth.Signer(private_key, issuer, login_url)
+```
+- 私钥以文件形式提供
+```python
+jwt_signer = oneid_auth.Signer.new_signer_from_key_file(key_file_path, issuer, login_url)
 ```
 2. 生成免登url：
 - 通过用户信息UserInfo生成(UserInfo中user_id和name为必传字段，username、email、mobile三个属性至少存在一个)

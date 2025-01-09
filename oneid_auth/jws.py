@@ -7,28 +7,27 @@ from datetime import datetime
 from calendar import timegm
 from urlparse import urlparse, parse_qsl, urlunparse
 from urllib import urlencode
+from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
 
 class UserInfo:
     def __init__(self, user_id, name, username=None, email=None, mobile=None, custom_attributes=None):
-        self.user_id = user_id
-        self.name = name
+        if check_invalid_string(user_id):
+            raise ValueError("user_id must not be empty")
+        if check_invalid_string(name):
+            raise ValueError("name must not be empty")
+
+        if (check_invalid_string(username)
+                and check_invalid_string(email)
+                and check_invalid_string(mobile)):
+            raise ValueError("username/email/mobile must not all empty")
+
+        self.user_id = user_id.strip()
+        self.name = name.strip()
         self.username = username
         self.email = email
         self.mobile = mobile
         self.custom_attributes = custom_attributes
-
-    def validate(self):
-        if check_invalid_string(self.user_id):
-            raise ValueError("user_id must be required")
-
-        if check_invalid_string(self.name):
-            raise ValueError("name must be required")
-
-        if (check_invalid_string(self.username)
-                and check_invalid_string(self.email)
-                and check_invalid_string(self.mobile)):
-            raise ValueError("preferred_user_name/email/mobile must not all empty")
 
     def as_claims(self):
         claims = {}
@@ -46,19 +45,50 @@ class UserInfo:
 
 
 class Signer:
-    def __init__(self, private_key, issuer, lifetime=constant.TOKEN_EXPIRE_SECOND, login_url=None,
+    def __init__(self, private_key, issuer, login_url, lifetime=constant.TOKEN_EXPIRE_SECOND,
                  token_key=constant.DEFAULT_TOKEN_PARAM):
-        self.private_key = private_key
+        if check_invalid_string(private_key):
+            raise ValueError("private_key must not be empty")
+        if check_invalid_string(issuer):
+            raise ValueError("issuer must not be empty")
+        if check_invalid_string(login_url):
+            raise ValueError("login_url must not be empty")
+        if lifetime <= 0 or lifetime > constant.TOKEN_EXPIRE_SECOND:
+            raise ValueError("lifetime must be greater than 0 and less than or equal to 300 seconds")
+        if check_invalid_string(token_key):
+            raise ValueError("token_key must not be empty")
+
+        handled_key = self.__normalize_key(private_key)
+        parsed_key = load_pem_private_key(handled_key.encode(), password=None)
+        self.private_key = parsed_key
         self.issuer = issuer
         self.login_url = login_url
         self.token_key = token_key
         self.lifetime = lifetime
 
-    def validate(self):
-        if check_invalid_string(self.private_key):
-            raise ValueError("invalid private_key")
-        if check_invalid_string(self.issuer):
-            raise ValueError("invalid issuer")
+    @classmethod
+    def new_signer_from_key_file(cls, key_file_path, issuer, login_url,
+                                 lifetime=constant.TOKEN_EXPIRE_SECOND,
+                                 token_key=constant.DEFAULT_TOKEN_PARAM):
+        try:
+            with open(key_file_path, "r") as key_file:
+                private_key = key_file.read()
+                return Signer(private_key, issuer, login_url, lifetime, token_key)
+        except IOError:
+            raise ValueError("key file not found")
+        except Exception as e:
+            raise e
+
+    @classmethod
+    def __normalize_key(cls, private_key):
+        private_key = private_key.strip()
+        prefix, suffix = "-----BEGIN PRIVATE KEY-----", "-----END PRIVATE KEY-----"
+        if private_key.startswith(prefix):
+            private_key = private_key[len(prefix):]
+            private_key = private_key[:-len(suffix)]
+        private_key = private_key.strip()
+
+        return prefix + "\r\n" + private_key + "\r\n" + suffix
 
     def __gen_standard_claims(self):
         now = timegm(datetime.utcnow().utctimetuple())
@@ -71,13 +101,11 @@ class Signer:
         }
 
     def sign(self, user_info):
-        self.validate()
         # 校验参数并封装为payload
         cur_claims = {}
         if user_info is not None:
             if not isinstance(user_info, UserInfo):
                 raise ValueError("invalid user_info")
-            user_info.validate()
             cur_claims.update(user_info.as_claims())
         # 配置参数封装
         cur_claims.update(self.__gen_standard_claims())
