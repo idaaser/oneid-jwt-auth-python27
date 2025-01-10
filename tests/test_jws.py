@@ -41,6 +41,13 @@ class TestJWS(unittest.TestCase):
             self.assertIsNotNone(e)
             print(e)
 
+    def test_invalid_login_url(self):
+        try:
+            signer = oneid_auth.Signer(rsa_private_key, issuer, "asdfw")
+        except ValueError as e:
+            self.assertIsNotNone(e)
+            print(e)
+
     def test_generate_token(self):
         custom_attr = {
             "employee_number": "001"

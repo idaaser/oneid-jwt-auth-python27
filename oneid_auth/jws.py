@@ -53,6 +53,10 @@ class Signer:
             raise ValueError("issuer must not be empty")
         if check_invalid_string(login_url):
             raise ValueError("login_url must not be empty")
+        parse_res = urlparse(login_url)
+        if not all([parse_res.scheme, parse_res.netloc, parse_res.path]):
+            raise ValueError("login_url is invalid")
+
         if lifetime <= 0 or lifetime > constant.TOKEN_EXPIRE_SECOND:
             raise ValueError("lifetime must be greater than 0 and less than or equal to 300 seconds")
         if check_invalid_string(token_key):
@@ -114,8 +118,6 @@ class Signer:
 
     def generate_login_url(self, user_info, app, params=None):
         # 获取url部分
-        if check_invalid_string(self.login_url):
-            raise ValueError("invalid login_url")
         if check_invalid_string(app):
             raise ValueError("invalid app")
         if app != oneid_auth.constant.App_Tencent_Meeting and app != oneid_auth.constant.App_Tencent_Docs:
