@@ -9,9 +9,21 @@ from urlparse import urlparse, parse_qsl, urlunparse
 from urllib import urlencode
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
+from .constant import DEFAULT_TOKEN_PARAM
+
 
 class UserInfo:
-    def __init__(self, user_id, name, username=None, email=None, mobile=None, custom_attributes=None):
+    """
+    用户信息
+
+    :parameter user_id: 必填: 用户唯一标识
+    :parameter name: 用户显示名
+    :parameter username: 建议填写: 用户登录名，1-64个英文字符或数字，用户登录名、邮箱、手机号三者必须提供一个
+    :parameter email: 选填: 邮箱，用户登录名、邮箱、手机号三者必须提供一个
+    :parameter mobile: 选填: 手机号，用户登录名、邮箱、手机号三者必须提供一个
+    :parameter extension: 其他需要放到id_token里的属性
+    """
+    def __init__(self, user_id, name, username=None, email=None, mobile=None, extension=None):
         if check_invalid_string(user_id):
             raise ValueError("user_id must not be empty")
         if check_invalid_string(name):
@@ -24,15 +36,18 @@ class UserInfo:
 
         self.user_id = user_id.strip()
         self.name = name.strip()
-        self.username = username
-        self.email = email
-        self.mobile = mobile
-        self.custom_attributes = custom_attributes
+        if username is not None:
+            self.username = username.strip()
+        if email is not None:
+            self.email = email.strip()
+        if mobile is not None:
+            self.mobile = mobile.strip()
+        self.extension = extension
 
     def as_claims(self):
         claims = {}
-        if self.custom_attributes is not None:
-            claims.update(self.custom_attributes)
+        if self.extension is not None:
+            claims.update(self.extension)
         claims[constant.CLAIM_SUBJECT] = self.user_id
         claims[constant.CLAIM_NAME] = self.name
         if self.username is not None and self.username != "":
@@ -45,39 +60,53 @@ class UserInfo:
 
 
 class Signer:
-    def __init__(self, private_key, issuer, login_url, lifetime=constant.TOKEN_EXPIRE_SECOND,
-                 token_key=constant.DEFAULT_TOKEN_PARAM):
+    """
+    初始化JWT认证签发器
+
+    :parameter private_key: 私钥
+    :parameter issuer: 发起登录方的应用标识
+    :parameter login_base_url: OneID JWT认证源页面提供的登录链接
+    :returns an JWT signer
+    :raise Exception
+    """
+    def __init__(self, private_key, issuer, login_base_url, lifetime=constant.TOKEN_EXPIRE_SECOND):
         if check_invalid_string(private_key):
             raise ValueError("private_key must not be empty")
         if check_invalid_string(issuer):
             raise ValueError("issuer must not be empty")
-        if check_invalid_string(login_url):
+        if check_invalid_string(login_base_url):
             raise ValueError("login_url must not be empty")
-        parse_res = urlparse(login_url)
+        parse_res = urlparse(login_base_url)
         if not all([parse_res.scheme, parse_res.netloc, parse_res.path]):
             raise ValueError("login_url is invalid")
 
         if lifetime <= 0 or lifetime > constant.TOKEN_EXPIRE_SECOND:
             raise ValueError("lifetime must be greater than 0 and less than or equal to 300 seconds")
-        if check_invalid_string(token_key):
-            raise ValueError("token_key must not be empty")
 
         handled_key = self.__normalize_key(private_key)
         parsed_key = load_pem_private_key(handled_key.encode(), password=None)
         self.private_key = parsed_key
-        self.issuer = issuer
-        self.login_url = login_url
-        self.token_key = token_key
+        self.issuer = issuer.strip()
+        self.login_url = login_base_url.strip()
+        self.token_key = DEFAULT_TOKEN_PARAM
         self.lifetime = lifetime
 
+    """
+    初始化JWT认证签发器
+
+    :parameter private_key: 私钥文件路径
+    :parameter issuer: 发起登录方的应用标识
+    :parameter login_base_url: OneID JWT认证源页面提供的登录链接
+    :returns an JWT signer
+    :raise Exception
+    """
     @classmethod
     def new_signer_from_key_file(cls, key_file_path, issuer, login_url,
-                                 lifetime=constant.TOKEN_EXPIRE_SECOND,
-                                 token_key=constant.DEFAULT_TOKEN_PARAM):
+                                 lifetime=constant.TOKEN_EXPIRE_SECOND):
         try:
             with open(key_file_path, "r") as key_file:
                 private_key = key_file.read()
-                return Signer(private_key, issuer, login_url, lifetime, token_key)
+                return Signer(private_key, issuer, login_url, lifetime)
         except IOError:
             raise ValueError("key file not found")
         except Exception as e:
@@ -104,7 +133,7 @@ class Signer:
             constant.CLAIM_AUDIENCE: constant.App_Tencent_OneID
         }
 
-    def sign(self, user_info):
+    def __new_token(self, user_info):
         # 校验参数并封装为payload
         cur_claims = {}
         if user_info is not None:
@@ -116,7 +145,15 @@ class Signer:
         # 执行签名
         return jwt.encode(cur_claims, self.private_key, algorithm='RS256')
 
-    def generate_login_url(self, user_info, app, params=None):
+    """
+    为指定用户创建一个免登应用的url
+     
+    :parameter user 免登用户的信息
+    :parameter app 免登应用的唯一标识
+    :returns 免登链接
+    :raise Exception
+    """
+    def new_login_url(self, user_info, app, params=None):
         # 获取url部分
         if check_invalid_string(app):
             raise ValueError("invalid app")
@@ -129,12 +166,16 @@ class Signer:
         parsed_url = urlparse(base_url)
         query_params = dict(parse_qsl(parsed_url.query))
         # 获取参数部分
-        token = self.sign(user_info)
+        token = self.__new_token(user_info)
         query_params[self.token_key] = token
         if params is not None:
             if not isinstance(params, dict):
                 raise ValueError("params must be None or dict")
-            query_params.update(params)
+            for k, v in params.items():
+                if not isinstance(k, str) or not isinstance(v, str):
+                    raise ValueError("params key/value must be str")
+                if k != "" and v != "":
+                    query_params[k] = v
         return urlunparse(parsed_url._replace(query=urlencode(query_params)))
 
 
