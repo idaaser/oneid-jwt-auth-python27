@@ -19,18 +19,18 @@ class TestJWS(unittest.TestCase):
         self.signer_from_key_file = oneid_auth.Signer.new_signer_from_key_file("./private.key", test_issuer,
                                                                                test_login_base_url)
         self.signer_with_headless_key = oneid_auth.Signer(test_headless_key, test_issuer, test_login_base_url,
-                                                          lifetime=200)
+                                                          token_lifetime=200)
 
     def test_smaller_token_lifetime(self):
         try:
-            signer = oneid_auth.Signer(test_private_key, test_issuer, test_login_base_url, lifetime=0)
+            signer = oneid_auth.Signer(test_private_key, test_issuer, test_login_base_url, token_lifetime=0)
         except ValueError as err:
             self.assertIsNotNone(err)
             print(err)
 
     def test_greater_token_lifetime(self):
         try:
-            signer = oneid_auth.Signer(test_private_key, test_issuer, test_login_base_url, lifetime=301)
+            signer = oneid_auth.Signer(test_private_key, test_issuer, test_login_base_url, token_lifetime=301)
         except ValueError as err:
             self.assertIsNotNone(err)
             print(err)

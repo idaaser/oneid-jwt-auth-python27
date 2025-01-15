@@ -69,7 +69,7 @@ class Signer:
     :returns an JWT signer
     :raise Exception
     """
-    def __init__(self, private_key, issuer, login_base_url, lifetime=constant.TOKEN_EXPIRE_SECOND):
+    def __init__(self, private_key, issuer, login_base_url, token_lifetime=constant.TOKEN_EXPIRE_SECOND):
         if check_invalid_string(private_key):
             raise ValueError("private_key must not be empty")
         if check_invalid_string(issuer):
@@ -80,7 +80,7 @@ class Signer:
         if not all([parse_res.scheme, parse_res.netloc, parse_res.path]):
             raise ValueError("login_url is invalid")
 
-        if lifetime <= 0 or lifetime > constant.TOKEN_EXPIRE_SECOND:
+        if token_lifetime <= 0 or token_lifetime > constant.TOKEN_EXPIRE_SECOND:
             raise ValueError("lifetime must be greater than 0 and less than or equal to 300 seconds")
 
         handled_key = self.__normalize_key(private_key)
@@ -89,7 +89,7 @@ class Signer:
         self.issuer = issuer.strip()
         self.login_url = login_base_url.strip()
         self.token_key = DEFAULT_TOKEN_PARAM
-        self.lifetime = lifetime
+        self.lifetime = token_lifetime
 
     """
     初始化JWT认证签发器
@@ -102,11 +102,11 @@ class Signer:
     """
     @classmethod
     def new_signer_from_key_file(cls, key_file_path, issuer, login_url,
-                                 lifetime=constant.TOKEN_EXPIRE_SECOND):
+                                 token_lifetime=constant.TOKEN_EXPIRE_SECOND):
         try:
             with open(key_file_path, "r") as key_file:
                 private_key = key_file.read()
-                return Signer(private_key, issuer, login_url, lifetime)
+                return Signer(private_key, issuer, login_url, token_lifetime)
         except IOError:
             raise ValueError("key file not found")
         except Exception as e:
