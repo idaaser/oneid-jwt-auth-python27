@@ -150,10 +150,11 @@ class Signer:
      
     :parameter user 免登用户的信息
     :parameter app 免登应用的唯一标识
+    :parameter params 表示自定义的key/value键值对(以query param的方式追加到免登链接之后)
     :returns 免登链接
     :raise Exception
     """
-    def new_login_url(self, user_info, app, params=None):
+    def new_login_url(self, user, app, params=None):
         # 获取url部分
         if check_invalid_string(app):
             raise ValueError("invalid app")
@@ -166,7 +167,7 @@ class Signer:
         parsed_url = urlparse(base_url)
         query_params = dict(parse_qsl(parsed_url.query))
         # 获取参数部分
-        token = self.__new_token(user_info)
+        token = self.__new_token(user)
         query_params[self.token_key] = token
         if params is not None:
             if not isinstance(params, dict):
